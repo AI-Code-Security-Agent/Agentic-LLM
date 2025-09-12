@@ -1,0 +1,15 @@
+fastapi~=0.115.0           # Pydantic v2-based FastAPI
+uvicorn[standard]~=0.30.6  # ASGI server (standard extras = uvloop, httptools, etc.)
+httpx~=0.27.2              # Async HTTP client
+python-dotenv~=1.0.1       # Load .env
+
+pydantic~=2.8.2            # Explicit pin to match FastAPI
+typing-extensions~=4.12.2  # Safe for Py<=3.11
+
+langgraph~=0.2.35          # StateGraph + MemorySaver used in main.py
+networkx~=3.3              # LangGraph dependency (explicit to avoid resolver edge cases)
+
+prometheus-client~=0.21.0  # /metrics endpoint support
+
+semgrep~=1.73.0            # Used by tools runner in main.py
+orjson~=3.10.7
