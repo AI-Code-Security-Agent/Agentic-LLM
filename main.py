@@ -1623,6 +1623,107 @@ if METRICS_ENABLED:
     async def metrics():
         return StreamingResponse(iter([generate_latest()]), media_type=CONTENT_TYPE_LATEST)
 
+@app.post("/chat/generate-title")
+async def generate_title(
+    request: dict,
+    client: httpx.AsyncClient = Depends(get_http_client)
+):
+    """
+    Generate a concise title for a chat based on the first message
+    """
+    try:
+        message = request.get("message", "")
+        temperature = request.get("temperature", 0.3)
+        
+        # Use request model/provider if provided, otherwise use defaults
+        model_id = request.get("model_id", DEFAULT_MODEL_ID)
+        provider = request.get("provider", DEFAULT_PROVIDER)
+        
+        if not message:
+            return {"response": "New Chat"}
+        
+        # Resolve model using the same logic as chat endpoints
+        model = resolve_model(model_id, provider)
+        
+        # Create prompt for title generation
+        system_prompt = """You are a title generator. Create a concise, descriptive title (3-7 words) that captures the essence of the user's message.
+Rules:
+- Maximum 50 characters
+- No quotes or punctuation marks
+- Use title case
+- Be specific and descriptive
+- Avoid generic terms like "Question", "Query", "Chat"
+Output ONLY the title, nothing else."""
+
+        user_prompt = f"Generate a title for this message:\n\n{message}"
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        # Call the appropriate provider
+        if model.provider == "openrouter":
+            response = await provider_openrouter_chat(
+                client, model, messages, 50, temperature
+            )
+        elif model.provider == "hf_inference":
+            response = await provider_hf_inference_chat(
+                client, model, messages, 50, temperature
+            )
+        else:
+            # Fallback if no valid provider
+            return {"response": createFallbackTitle(message)}
+        
+        # Clean the response
+        title = response.strip().replace('"', '').replace("'", "")
+        
+        # Validate title
+        if not title or len(title) < 3:
+            # Extract key words from message as fallback
+            words = message.split()[:5]
+            title = " ".join(words)
+        
+        if len(title) > 50:
+            title = title[:47] + "..."
+        
+        return {"response": title}
+        
+    except Exception as e:
+        logger.error(f"Title generation error: {e}")
+        # Generate fallback title
+        return {"response": createFallbackTitle(message)}
+
+def createFallbackTitle(message: str) -> str:
+    """Python version of fallback title generation"""
+    import re
+    
+    title = message.strip()
+    
+    # Remove common prefixes
+    prefixes = [
+        r'^(how|what|why|when|where|can|could|would|should|is|are|do|does|tell me|explain|describe)\s+',
+        r'^(i want to|i need to|i\'d like to|please|help me)\s+'
+    ]
+    
+    for prefix in prefixes:
+        title = re.sub(prefix, '', title, flags=re.IGNORECASE)
+    
+    # Capitalize first letter
+    if title:
+        title = title[0].upper() + title[1:]
+    
+    # Truncate if too long
+    if len(title) > 50:
+        # Try to cut at word boundary
+        last_space = title.rfind(' ', 0, 47)
+        if last_space > 20:
+            title = title[:last_space] + "..."
+        else:
+            title = title[:47] + "..."
+    
+    return title or "New Chat"
+
 # --------------------- Dev entrypoint ------------------------------------
 
 if __name__ == "__main__":
